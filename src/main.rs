@@ -4,6 +4,8 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
 use std::thread;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 
 fn handle_connection(mut stream: std::net::TcpStream, directory: &str) {
     // Buffer to store the request
@@ -115,19 +117,23 @@ fn handle_connection(mut stream: std::net::TcpStream, directory: &str) {
         stream.write_all(response.as_bytes()).unwrap();
     } else if url_path.starts_with("/echo/") {
         let response_str = &url_path[6..]; // Extract the string after "/echo/"
-        let content_length = response_str.len();
+        let mut response_body = response_str.as_bytes().to_vec();
+
         let mut response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n",
-            content_length
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
         );
 
         if accept_gzip {
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+            encoder.write_all(&response_body).unwrap();
+            response_body = encoder.finish().unwrap();
             response.push_str("Content-Encoding: gzip\r\n");
         }
 
-        response.push_str("\r\n");
+        response.push_str(&format!("Content-Length: {}\r\n\r\n", response_body.len()));
+
         stream.write_all(response.as_bytes()).unwrap();
-        stream.write_all(response_str.as_bytes()).unwrap();
+        stream.write_all(&response_body).unwrap();
     } else if url_path == "/" {
         let response = "HTTP/1.1 200 OK\r\n\r\n".to_string();
         stream.write_all(response.as_bytes()).unwrap();
