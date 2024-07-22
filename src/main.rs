@@ -1,5 +1,5 @@
 use std::env;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -120,6 +120,13 @@ fn handle_post(stream: &mut std::net::TcpStream, url_path: &str, headers: Vec<&s
     if url_path.starts_with("/files/") {
         let filename = &url_path[7..]; // extract the filename after "/files/"
         let filepath = format!("{}/{}", directory, filename);
+
+        // ensure the directory exists
+        if let Some(parent) = Path::new(&filepath).parent() {
+            if !parent.exists() {
+                create_dir_all(parent).unwrap();
+            }
+        }
 
         // find the content length from the headers
         let content_length = headers.iter()
