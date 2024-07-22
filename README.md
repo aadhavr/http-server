@@ -2,6 +2,58 @@
 
 This project is a simple HTTP server implemented in Rust. It handles basic HTTP requests, supports gzip compression, and can handle concurrent connections. The server was developed as a learning exercise with guidance from [codecrafters.io](https://codecrafters.io).
 
+```mermaid
+graph TD
+    A[Start] --> B[Parse Command Line Arguments]
+    B --> C{Directory Provided?}
+    C -->|Yes| D[Use Provided Directory]
+    C -->|No| E[Use Current Directory]
+    D --> F[Create TcpListener]
+    E --> F
+    F --> G[Listen for Incoming Connections]
+    G --> H[Accept Connection]
+    H --> I[Spawn New Thread]
+    I --> J[Read Request]
+    J --> K[Parse Request]
+    K --> L{Determine Request Type}
+    L -->|GET| M[Handle GET Request]
+    L -->|POST| N[Handle POST Request]
+    L -->|Other| O[Send 405 Method Not Allowed]
+    M --> P{Determine GET Path}
+    P -->|Root| Q[Send 200 OK]
+    P -->|/user-agent| R[Send User-Agent]
+    P -->|/files/*| S[Send File Contents]
+    P -->|/echo/*| T[Echo Path Content]
+    P -->|Other| U[Send 404 Not Found]
+    N --> V{Is /files/* Path?}
+    V -->|Yes| W[Write File]
+    V -->|No| X[Send 405 Method Not Allowed]
+    W --> Y[Send 201 Created]
+    
+    subgraph "Memory Management"
+    Z[Stack: Local Variables]
+    AA[Heap: Dynamic Allocations]
+    AB[File System: Stored Files]
+    end
+    
+    subgraph "Input/Output"
+    AC[Input: HTTP Requests]
+    AD[Output: HTTP Responses]
+    AE[File I/O: Read/Write]
+    end
+    
+    subgraph "Key Components"
+    AF[TcpListener]
+    AG[TcpStream]
+    AH[File Operations]
+    AI[GzEncoder]
+    end
+    
+    subgraph "Concurrency Model"
+    AJ[Thread per Connection]
+    end
+```
+
 ## Features
 
 The server handles HTTP GET and POST requests. It supports several endpoints including `/`, `/user-agent`, `/files/{filename}`, and `/echo/{str}`. It also supports gzip compression for responses if requested by the client. Additionally, the server is capable of handling concurrent connections using threads.
