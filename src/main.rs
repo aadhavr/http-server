@@ -20,6 +20,17 @@ fn handle_connection(mut stream: std::net::TcpStream, directory: &str) {
     let method = parts.next().unwrap();
     let url_path = parts.next().unwrap();
 
+    // Determine if gzip encoding is supported
+    let mut accept_gzip = false;
+    for header in headers.clone() {
+        if header.to_lowercase().starts_with("accept-encoding:") {
+            if header.contains("gzip") {
+                accept_gzip = true;
+                break;
+            }
+        }
+    }
+
     // Determine the response based on the method and path
     if url_path.starts_with("/files/") {
         let filename = &url_path[7..]; // Extract the filename after "/files/"
@@ -32,10 +43,16 @@ fn handle_connection(mut stream: std::net::TcpStream, directory: &str) {
                 file.read_to_end(&mut contents).unwrap();
                 let content_length = contents.len();
 
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
+                let mut response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n",
                     content_length
                 );
+
+                if accept_gzip {
+                    response.push_str("Content-Encoding: gzip\r\n");
+                }
+
+                response.push_str("\r\n");
                 stream.write_all(response.as_bytes()).unwrap();
                 stream.write_all(&contents).unwrap();
             } else {
@@ -98,11 +115,18 @@ fn handle_connection(mut stream: std::net::TcpStream, directory: &str) {
     } else if url_path.starts_with("/echo/") {
         let response_str = &url_path[6..]; // Extract the string after "/echo/"
         let content_length = response_str.len();
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-            content_length, response_str
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n",
+            content_length
         );
+
+        if accept_gzip {
+            response.push_str("Content-Encoding: gzip\r\n");
+        }
+
+        response.push_str("\r\n");
         stream.write_all(response.as_bytes()).unwrap();
+        stream.write_all(response_str.as_bytes()).unwrap();
     } else if url_path == "/" {
         let response = "HTTP/1.1 200 OK\r\n\r\n".to_string();
         stream.write_all(response.as_bytes()).unwrap();
