@@ -24,7 +24,8 @@ fn handle_connection(mut stream: std::net::TcpStream, directory: &str) {
     let mut accept_gzip = false;
     for header in headers.clone() {
         if header.to_lowercase().starts_with("accept-encoding:") {
-            if header.contains("gzip") {
+            let encodings: Vec<&str> = header.split(':').nth(1).unwrap().split(',').map(|s| s.trim()).collect();
+            if encodings.contains(&"gzip") {
                 accept_gzip = true;
                 break;
             }
