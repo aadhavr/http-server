@@ -1,5 +1,5 @@
 use std::env;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -7,36 +7,72 @@ use std::thread;
 
 fn handle_connection(mut stream: std::net::TcpStream, directory: &str) {
     // Buffer to store the request
-    let mut buffer = [0; 512];
-    stream.read(&mut buffer).unwrap();
+    let mut buffer = [0; 1024];
+    let bytes_read = stream.read(&mut buffer).unwrap();
 
     // Convert buffer to string
-    let request = String::from_utf8_lossy(&buffer[..]);
+    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
     let mut headers = request.lines();
 
     // Extract the request line
     let request_line = headers.next().unwrap();
-    let url_path = request_line.split_whitespace().nth(1).unwrap();
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap();
+    let url_path = parts.next().unwrap();
 
-    // Determine the response
+    // Determine the response based on the method and path
     if url_path.starts_with("/files/") {
         let filename = &url_path[7..]; // Extract the filename after "/files/"
         let filepath = format!("{}/{}", directory, filename);
 
-        if Path::new(&filepath).exists() {
-            let mut file = File::open(&filepath).unwrap();
-            let mut contents = Vec::new();
-            file.read_to_end(&mut contents).unwrap();
-            let content_length = contents.len();
+        if method == "GET" {
+            if Path::new(&filepath).exists() {
+                let mut file = File::open(&filepath).unwrap();
+                let mut contents = Vec::new();
+                file.read_to_end(&mut contents).unwrap();
+                let content_length = contents.len();
 
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
-                content_length
-            );
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
+                    content_length
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+                stream.write_all(&contents).unwrap();
+            } else {
+                let response = "HTTP/1.1 404 Not Found\r\n\r\n".to_string();
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        } else if method == "POST" {
+            // Read headers to find Content-Length
+            let mut content_length = 0;
+            for header in headers.clone() {
+                if header.to_lowercase().starts_with("content-length:") {
+                    content_length = header.split(':').nth(1).unwrap().trim().parse().unwrap();
+                    break;
+                }
+            }
+
+            // Calculate how much of the body is already read
+            let body_start = request.find("\r\n\r\n").unwrap() + 4;
+            let already_read_body = &buffer[body_start..bytes_read];
+            let mut body = Vec::from(already_read_body);
+
+            // Read the rest of the request body if not fully read
+            if body.len() < content_length {
+                let mut remaining_body = vec![0; content_length - body.len()];
+                stream.read_exact(&mut remaining_body).unwrap();
+                body.extend_from_slice(&remaining_body);
+            }
+
+            // Write the request body to the file
+            let mut file = OpenOptions::new().write(true).create(true).open(&filepath).unwrap();
+            file.write_all(&body).unwrap();
+
+            // Respond with 201 Created
+            let response = "HTTP/1.1 201 Created\r\n\r\n".to_string();
             stream.write_all(response.as_bytes()).unwrap();
-            stream.write_all(&contents).unwrap();
         } else {
-            let response = "HTTP/1.1 404 Not Found\r\n\r\n".to_string();
+            let response = "HTTP/1.1 405 Method Not Allowed\r\n\r\n".to_string();
             stream.write_all(response.as_bytes()).unwrap();
         }
     } else if url_path == "/user-agent" {
