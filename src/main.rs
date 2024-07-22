@@ -19,25 +19,41 @@ fn main() {
                 stream.read(&mut buffer).unwrap();
 
                 let request = String::from_utf8_lossy(&buffer[..]);
+                let mut headers = request.lines();
+                
                 let request_line = request.lines().next().unwrap();
-
                 let url_path = request_line.split_whitespace().nth(1).unwrap();
 
-                let response = if url_path == "/" {
-                    "HTTP/1.1 200 OK\r\n\r\n".to_string()
+                if url_path == "/user-agent" {
+                    let mut user_agent = "";
+
+                    for header in headers {
+                        if header.to_lowercase().starts_with("user-agent:") {
+                            user_agent = header.split(":").nth(1).unwrap().trim();
+                            break;
+                        }
+                    }
+                
+
+                    let content_length = user_agent.len();
+                    let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                            content_length, user_agent
+                    );
+
+                    let _ = stream.write_all(response.as_bytes()).unwrap();
                 } else if url_path.starts_with("/echo/") {
-                    let response_str = &url_path[6..];
+                    let response_str = &url_path[6..]; // Extract the string after "/echo/"
                     let content_length = response_str.len();
-                    format!(
+                    let response = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
                         content_length, response_str
-                    )
+                    );
+                    stream.write_all(response.as_bytes()).unwrap();
                 } else {
-                    "HTTP/1.1 404 Not Found\r\n\r\n".to_string()
-                };
-
-                let _ = stream.write_all(response.as_bytes()).unwrap();
-
+                    let response = "HTTP/1.1 404 Not Found\r\n\r\n".to_string();
+                    let _ = stream.write_all(response.as_bytes()).unwrap();
+                }
             }
             Err(e) => {
                 println!("error: {}", e);
